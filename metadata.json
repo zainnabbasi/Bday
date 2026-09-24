@@ -1,0 +1,6 @@
+{
+  "name": "Birthday Post Maker",
+  "description": "Generate high-resolution employee posts for birthdays, work anniversaries, and weekly new joiners updates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
