@@ -8,6 +8,46 @@ interface Props {
   eventType: EventType;
 }
 
+// Helper to extract a field from an Excel row with case-insensitive and punctuation-insensitive matching
+const extractRowField = (row: any, aliases: string[]): string => {
+  if (!row || typeof row !== 'object') return '';
+  const rowKeys = Object.keys(row);
+
+  // 1. Direct key match
+  for (const alias of aliases) {
+    if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
+      return String(row[alias]).trim();
+    }
+  }
+
+  // 2. Case-insensitive key match
+  for (const alias of aliases) {
+    const aliasLower = alias.toLowerCase();
+    const matchedKey = rowKeys.find(k => k.trim().toLowerCase() === aliasLower);
+    if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && String(row[matchedKey]).trim() !== '') {
+      return String(row[matchedKey]).trim();
+    }
+  }
+
+  // 3. Normalized key match (strip spaces, underscores, dots, hyphens)
+  for (const alias of aliases) {
+    const aliasClean = alias.toLowerCase().replace(/[\s_\-.]+/g, '');
+    const matchedKey = rowKeys.find(k => k.toLowerCase().replace(/[\s_\-.]+/g, '') === aliasClean);
+    if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && String(row[matchedKey]).trim() !== '') {
+      return String(row[matchedKey]).trim();
+    }
+  }
+
+  return '';
+};
+
+// Aliases for common employee codes across various HRMS Excel exports
+const EMP_CODE_ALIASES = [
+  'Employee Code', 'Emp Code', 'EmpCode', 'EmployeeCode', 'Emp_Code', 'Employee_Code', 
+  'Code', 'CODE', 'Emp ID', 'EmpId', 'Employee ID', 'EmployeeId', 'ID', 'Id',
+  'Emp No', 'Employee No', 'EmpNo', 'EmployeeNumber', 'Staff Code', 'Staff ID', 'Personnel Number'
+];
+
 // Helper to reliably extract and format a date from various Excel inputs
 const parseExcelDate = (raw: any): { month: number; day: number; formatted: string } | null => {
   if (!raw) return null;
@@ -96,16 +136,17 @@ export function ExcelDropzone({ onDataLoaded, eventType }: Props) {
 
       if (eventType === 'new_joiners') {
         const joiners: Employee[] = data.map((row, index) => {
-          const empCode = row['Employee Code'] || row['Emp Code'] || row['EmpCode'] || row['EmployeeCode'] || row['Emp_Code'] || row['Employee ID'] || row['ID'] || row['Code'] || '';
-          const name = row['Employee Name'] || row['Name'] || row['name'] || row['Emp Name'] || row['emp_name'] || row['Full Name'] || 'New Joiner';
-          const designation = row['Designation'] || row['designation'] || row['Role'] || row['role'] || row['Title'] || row['title'] || row['Position'] || row['Department'] || 'Team Member';
-          const location = row['Location'] || row['location'] || row['Branch'] || row['branch'] || row['City'] || row['city'] || row['Place'] || 'Corporate';
+          const empCode = extractRowField(row, EMP_CODE_ALIASES);
+          const name = extractRowField(row, ['Employee Name', 'Emp Name', 'Name', 'Full Name', 'Employee', 'Member Name']) || 'New Joiner';
+          const designation = extractRowField(row, ['Designation', 'Role', 'Title', 'Position', 'Department', 'Job Title']) || 'Team Member';
+          const location = extractRowField(row, ['Location', 'Branch', 'City', 'Place', 'Office', 'Base Location']) || 'Corporate';
+          const imageName = extractRowField(row, ['ImageName', 'Image Name', 'Photo Name', 'PhotoName', 'Photo', 'Image']);
 
           return {
             id: `joiner-${index}-${Date.now()}`,
             name: String(name).trim(),
             sentence: 'Welcome to the team!',
-            imageName: row['ImageName'] || row['imageName'] || '',
+            imageName: imageName ? String(imageName).trim() : '',
             empCode: String(empCode).trim(),
             designation: String(designation).trim(),
             location: String(location).trim(),
@@ -118,18 +159,25 @@ export function ExcelDropzone({ onDataLoaded, eventType }: Props) {
       }
 
       let parsed = data.map((row, index) => {
-        const rawDob = row['DOB'] || row['Date of Birth'] || row['BirthDate'] || row['dob'] || row['Date'] || row['Joining Date'] || row['Anniversary'];
+        const rawDob = extractRowField(row, [
+          'DOB', 'Date of Birth', 'BirthDate', 'Birth Date', 'Date', 
+          'Joining Date', 'Anniversary', 'Date of Joining', 'DOJ', 'JoiningDate', 'Work Anniversary'
+        ]);
         const dateInfo = parseExcelDate(rawDob);
         const defaultSentence = randomSentences[Math.floor(Math.random() * randomSentences.length)];
-        const designation = row['Designation'] || row['designation'] || row['Role'] || row['Title'] || '';
-        const location = row['Location'] || row['location'] || row['Branch'] || row['City'] || '';
+        const empCode = extractRowField(row, EMP_CODE_ALIASES);
+        const name = extractRowField(row, ['Employee Name', 'Emp Name', 'Name', 'Full Name', 'Employee', 'Member Name']) || 'Unknown';
+        const sentence = extractRowField(row, ['Sentence', 'sentence', 'Wish', 'Message', 'Greeting', 'Quote']) || defaultSentence;
+        const imageName = extractRowField(row, ['ImageName', 'Image Name', 'Photo Name', 'PhotoName', 'Photo', 'Image']);
+        const designation = extractRowField(row, ['Designation', 'Role', 'Title', 'Position', 'Department', 'Job Title']);
+        const location = extractRowField(row, ['Location', 'Branch', 'City', 'Place', 'Office', 'Base Location']);
         
         return {
           id: `emp-${index}-${Date.now()}`,
-          name: row['Name'] || row['Employee Name'] || row['name'] || 'Unknown',
-          sentence: row['Sentence'] || row['sentence'] || defaultSentence,
-          imageName: row['ImageName'] || row['imageName'] || '',
-          empCode: row['Employee Code'] || row['Emp Code'] || row['EmpCode'] || row['ID'] || row['Code'] || '',
+          name: String(name).trim(),
+          sentence: String(sentence).trim(),
+          imageName: imageName ? String(imageName).trim() : '',
+          empCode: String(empCode).trim(),
           designation: String(designation).trim(),
           location: String(location).trim(),
           _sortMonth: dateInfo ? dateInfo.month : 99,
